@@ -68,14 +68,38 @@ $PY -m venv .venv 2>/dev/null || { $SUDO apt-get install -y python3-venv && $PY 
 
 chmod +x avito_phone_parser.py run.sh 2>/dev/null || true
 
-# симлинк в PATH для запуска командой «avito» из любой папки
+# команда «avito» в PATH — генерируем обёртку с АБСОЛЮТНЫМИ путями,
+# чтобы запуск работал из любой папки (в т.ч. когда ~/bin ещё не в PATH)
+APP_DIR="$(pwd)"
+mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+{
+  echo '#!/usr/bin/env bash'
+  echo "# avito — запуск парсера Avito (сгенерировано install.sh)"
+  echo 'cd "'"$APP_DIR"'" || { echo "[!] Папка $APP_DIR не найдена — переустановите:"; echo "    curl -fsSL https://raw.githubusercontent.com/openasteria/avito-phone-parser/main/install.sh | bash"; exit 1; }'
+  if [ -x "$APP_DIR/.venv/bin/python" ]; then
+    echo 'exec "'"$APP_DIR"'/.venv/bin/python" "'"$APP_DIR"'/avito_phone_parser.py" "$@"'
+  else
+    echo 'exec python3 "'"$APP_DIR"'/avito_phone_parser.py" "$@"'
+  fi
+} > "$HOME/.local/bin/avito"
+chmod +x "$HOME/.local/bin/avito"
+
+# добавляем ~/.local/bin в PATH для bash и zsh (идемпотентно)
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if ! grep -qs '.local/bin' "$rc" 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+    fi
+done
+
+# симлинк в /usr/local/bin (если есть права) — тоже рабочая обёртка, а не битый скрипт
 if [ -d /usr/local/bin ]; then
-    $SUDO ln -sf "$(pwd)/run.sh" /usr/local/bin/avito 2>/dev/null || true
+    $SUDO cp -f "$HOME/.local/bin/avito" /usr/local/bin/avito 2>/dev/null || true
+    $SUDO chmod +x /usr/local/bin/avito 2>/dev/null || true
 fi
 
 echo ""
 echo "[✔] Установка завершена."
-echo "    Запуск меню выбора телефона:   ./run.sh        (или команда: avito)"
+echo "    Запуск меню:                   ./run.sh   или команда: avito   (новый терминал или: source ~/.zshrc)"
 echo "    CLI-режим:                     ./run.sh --model \"iPhone 15 Pro Max\" --count 50"
 echo ""
 exec ./run.sh "$@"
