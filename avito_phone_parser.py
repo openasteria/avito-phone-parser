@@ -243,8 +243,14 @@ def textual_app():
             tree = self.query_one("#tree", Tree)
             tree.show_root = False
             tree.auto_expand = False
+            # API textual: узлы добавляются через tree.root (TreeNode.add).
+            # Совместимость со старыми версиями — fallback на tree.add_node.
+            root = getattr(tree, "root", None)
             for cat, models in self.menu.items():
-                node = tree.add_node(cat, data=("cat", cat))
+                if root is not None and hasattr(root, "add"):
+                    node = root.add(cat, data=("cat", cat))
+                else:
+                    node = tree.add_node(cat, data=("cat", cat))
                 for m in models:
                     node.add_leaf(m, data=("model", m))
 
