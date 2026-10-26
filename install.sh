@@ -1,10 +1,28 @@
 #!/usr/bin/env bash
 # install.sh — установка и запуск парсера Avito на Linux / Kali Linux.
 #
-#  curl -fsSL https://raw.githubusercontent.com/<owner>/avito-phone-parser/main/install.sh | sudo bash
-#  или:  git clone ... && cd avito-phone-parser && ./install.sh
+#  curl -fsSL https://raw.githubusercontent.com/openasteria/avito-phone-parser/main/install.sh | bash
+#  или:  git clone https://github.com/openasteria/avito-phone-parser.git && cd avito-phone-parser && ./install.sh
 set -e
-cd "$(dirname "$0")"
+
+REPO_URL="https://github.com/openasteria/avito-phone-parser.git"
+TARGET_DIR="${AVITO_HOME:-$HOME/avito-phone-parser}"
+
+# если скрипт скачан отдельно (не из клонов репозитория) — скачиваем репозиторий сам
+if [ ! -f "avito_phone_parser.py" ]; then
+    HERE="$(cd "$(dirname "$0")" && pwd)"
+    if [ ! -f "$HERE/avito_phone_parser.py" ]; then
+        echo "[*] Репозиторий не найден локально — скачиваю с GitHub..."
+        command -v git >/dev/null || { apt-get update -y && apt-get install -y git; } 2>/dev/null || \
+            { command -v sudo >/dev/null && sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git; }
+        rm -rf "$TARGET_DIR"
+        git clone --depth 1 "$REPO_URL" "$TARGET_DIR"
+        exec bash "$TARGET_DIR/install.sh" "$@"
+    fi
+    cd "$HERE"
+else
+    cd "$(dirname "$0")"
+fi
 
 PY=python3
 SUDO=""

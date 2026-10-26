@@ -27,8 +27,14 @@
 
 ## 🚀 Быстрая установка (одна команда)
 
+**Вариант 1 — одна команда (всё скачает и запустит меню):**
 ```bash
-git clone https://github.com/<ВАШ_ЛОГИН>/avito-phone-parser.git && \
+curl -fsSL https://raw.githubusercontent.com/openasteria/avito-phone-parser/main/install.sh | bash
+```
+
+**Вариант 2 — через git clone:**
+```bash
+git clone https://github.com/openasteria/avito-phone-parser.git && \
 cd avito-phone-parser && chmod +x install.sh run.sh && ./install.sh
 ```
 
