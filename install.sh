@@ -8,6 +8,12 @@ set -e
 REPO_URL="https://github.com/openasteria/avito-phone-parser.git"
 TARGET_DIR="${AVITO_HOME:-$HOME/avito-phone-parser}"
 
+# Скачиваем свежий install.sh, обходя кэш raw.githubusercontent.com (бывали случаи
+# отдачи устаревших версий). Первый доступный источник побеждает.
+fetch_install() {
+    curl -fsSL --max-time 20 "https://raw.githubusercontent.com/openasteria/avito-phone-parser/main/install.sh"     || curl -fsSL --max-time 20 "https://cdn.statically.io/gh/openasteria/avito-phone-parser/main/install.sh"     || curl -fsSL --max-time 20 "https://gcore.jsdelivr.net/gh/openasteria/avito-phone-parser@main/install.sh"     || true
+}
+
 # Если скрипт скачан отдельно (curl | bash) или файлы устарели — (пере)скачиваем репозиторий.
 # Повторный запуск команды установки всегда подтягивает свежие изменения с GitHub (git pull).
 need_clone=0
@@ -25,21 +31,40 @@ else
 fi
 
 if [ "$need_clone" = "1" ]; then
-    HERE="$(cd "$(dirname "$0" 2>/dev/null)" && pwd)" || HERE="$PWD"
-    if [ ! -f "$HERE/avito_phone_parser.py" ]; then
-        echo "[*] Репозиторий не найден локально — скачиваю с GitHub..."
-        command -v git >/dev/null || { apt-get update -y && apt-get install -y git; } 2>/dev/null || \
-            { command -v sudo >/dev/null && sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git; }
-        if [ -d "$TARGET_DIR/.git" ]; then
-            git -C "$TARGET_DIR" pull --ff-only 2>/dev/null || { rm -rf "$TARGET_DIR"; git clone --depth 1 "$REPO_URL" "$TARGET_DIR"; }
-        else
-            rm -rf "$TARGET_DIR"
-            git clone --depth 1 "$REPO_URL" "$TARGET_DIR"
-        fi
-        exec bash "$TARGET_DIR/install.sh" "$@"
+    # Режим «curl | bash»: скрипт запущен из stdin — скачиваем репозиторий сами.
+    echo "[*] Репозиторий не найден локально — скачиваю с GitHub..."
+    command -v git >/dev/null || { apt-get update -y && apt-get install -y git; } 2>/dev/null || \
+        { command -v sudo >/dev/null && sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git; }
+    if [ -d "$TARGET_DIR/.git" ]; then
+        git -C "$TARGET_DIR" pull --ff-only 2>/dev/null || { rm -rf "$TARGET_DIR"; git clone --depth 1 "$REPO_URL" "$TARGET_DIR"; }
+    else
+        rm -rf "$TARGET_DIR"
+        git clone --depth 1 "$REPO_URL" "$TARGET_DIR"
     fi
-    cd "$HERE"
+    # Догружаем СВЕЖИЙ install.sh в обход кэша CDN и запускаем его из папки репозитория.
+    fetch_install > "$TARGET_DIR/install.sh.new" 2>/dev/null
+    if grep -q "APP_DIR" "$TARGET_DIR/install.sh.new" 2>/dev/null; then
+        mv "$TARGET_DIR/install.sh.new" "$TARGET_DIR/install.sh"
+        chmod +x "$TARGET_DIR/install.sh"
+    else
+        rm -f "$TARGET_DIR/install.sh.new"
+    fi
+    cd "$TARGET_DIR"
+    exec bash "$TARGET_DIR/install.sh" "$@"
 fi
+
+# Локальный запуск (./install.sh): если на GitHub есть более свежая версия скрипта —
+# перегоняемся через несколько CDN на случай кэша raw.githubusercontent.com.
+SELF="$(cd "$(dirname "$0")" && pwd)/install.sh"
+LATEST="$(mktemp /tmp/avito-install.XXXXXX.sh)"
+fetch_install > "$LATEST" 2>/dev/null
+if [ -s "$LATEST" ] && ! cmp -s "$SELF" "$LATEST"; then
+    echo "[*] Найдена свежая версия установщика — обновляю и перезапускаю..."
+    cp "$LATEST" "$SELF" && chmod +x "$SELF"
+    rm -f "$LATEST"
+    exec bash "$SELF" "$@"
+fi
+rm -f "$LATEST"
 
 PY=python3
 SUDO=""
