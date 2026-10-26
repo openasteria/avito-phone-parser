@@ -8,20 +8,37 @@ set -e
 REPO_URL="https://github.com/openasteria/avito-phone-parser.git"
 TARGET_DIR="${AVITO_HOME:-$HOME/avito-phone-parser}"
 
-# если скрипт скачан отдельно (не из клонов репозитория) — скачиваем репозиторий сам
+# Если скрипт скачан отдельно (curl | bash) или файлы устарели — (пере)скачиваем репозиторий.
+# Повторный запуск команды установки всегда подтягивает свежие изменения с GitHub (git pull).
+need_clone=0
 if [ ! -f "avito_phone_parser.py" ]; then
-    HERE="$(cd "$(dirname "$0")" && pwd)"
+    need_clone=1
+else
+    cd "$(dirname "$0")"
+    # если это git-клон и на GitHub есть новые коммиты — обновляем, чтобы фиксы сразу применялись
+    if [ -d .git ] && command -v git >/dev/null 2>&1; then
+        echo "[*] Проверяю обновления на GitHub..."
+        git fetch --depth 1 origin main >/dev/null 2>&1 && \
+            git reset --hard origin/main >/dev/null 2>&1 && \
+            echo "[✔] Код обновлён до последней версии." || true
+    fi
+fi
+
+if [ "$need_clone" = "1" ]; then
+    HERE="$(cd "$(dirname "$0" 2>/dev/null)" && pwd)" || HERE="$PWD"
     if [ ! -f "$HERE/avito_phone_parser.py" ]; then
         echo "[*] Репозиторий не найден локально — скачиваю с GitHub..."
         command -v git >/dev/null || { apt-get update -y && apt-get install -y git; } 2>/dev/null || \
             { command -v sudo >/dev/null && sudo apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git; }
-        rm -rf "$TARGET_DIR"
-        git clone --depth 1 "$REPO_URL" "$TARGET_DIR"
+        if [ -d "$TARGET_DIR/.git" ]; then
+            git -C "$TARGET_DIR" pull --ff-only 2>/dev/null || { rm -rf "$TARGET_DIR"; git clone --depth 1 "$REPO_URL" "$TARGET_DIR"; }
+        else
+            rm -rf "$TARGET_DIR"
+            git clone --depth 1 "$REPO_URL" "$TARGET_DIR"
+        fi
         exec bash "$TARGET_DIR/install.sh" "$@"
     fi
     cd "$HERE"
-else
-    cd "$(dirname "$0")"
 fi
 
 PY=python3
